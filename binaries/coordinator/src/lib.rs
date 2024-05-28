@@ -6,7 +6,7 @@ pub use control::ControlEvent;
 use dora_core::{
     config::{NodeId, OperatorId},
     coordinator_messages::RegisterResult,
-    daemon_messages::{DaemonCoordinatorEvent, DaemonCoordinatorReply, Timestamped},
+    daemon_messages::{DaemonCoordinatorEvent, DaemonCoordinatorReply, NodeConfig, Timestamped},
     descriptor::{Descriptor, ResolvedNode},
     message::uhlc::{self, HLC},
     topics::{control_socket_addr, ControlRequest, ControlRequestReply, DataflowId},
@@ -484,6 +484,30 @@ async fn start_inner(
                             ));
                             let _ = reply_sender.send(reply);
                         }
+                        ControlRequest::NodeConfig {
+                            dataflow_id,
+                            node_id,
+                        } => {
+                            let message = if let Ok(uuid) =
+                                Uuid::parse_str(&dataflow_id).context("could not parse dataflow id")
+                            {
+                                get_node_info(
+                                    &running_dataflows,
+                                    &mut daemon_connections,
+                                    uuid,
+                                    node_id,
+                                    clock.new_timestamp(),
+                                )
+                                .await
+                                .map(|node_config| {
+                                    let message = ControlRequestReply::NodeConfig { node_config };
+                                    message
+                                })
+                            } else {
+                                Err(eyre::eyre!("could not parse dataflow id. Name parsing is not implemented name parsing yet!"))
+                            };
+                            let _ = reply_sender.send(message);
+                        }
                     }
                 }
                 ControlEvent::Error(err) => tracing::error!("{err:?}"),
@@ -700,6 +724,47 @@ impl PartialEq for RunningDataflow {
 }
 
 impl Eq for RunningDataflow {}
+
+async fn get_node_info(
+    running_dataflows: &HashMap<Uuid, RunningDataflow>,
+    daemon_connections: &mut HashMap<String, DaemonConnection>,
+    uuid: Uuid,
+    node_id: NodeId,
+    timestamp: uhlc::Timestamp,
+) -> eyre::Result<NodeConfig> {
+    let dataflow = running_dataflows.get(&uuid).unwrap();
+    let node = dataflow
+        .nodes
+        .iter()
+        .find(|node| node.id == node_id)
+        .unwrap();
+    let machine_id = &node.deploy.machine;
+    let daemon_connection = daemon_connections
+        .get_mut(machine_id)
+        .wrap_err("no daemon connection")?; // TODO: take from dataflow spec
+    let message = serde_json::to_vec(&Timestamped {
+        inner: DaemonCoordinatorEvent::NodeConfig {
+            dataflow_id: uuid,
+            node_id,
+        },
+        timestamp,
+    })?;
+
+    tcp_send(&mut daemon_connection.stream, &message)
+        .await
+        .wrap_err("failed to send node config message to daemon")?;
+    let reply_raw = tcp_receive(&mut daemon_connection.stream)
+        .await
+        .wrap_err("failed to receive stop reply from daemon")?;
+    match serde_json::from_slice(&reply_raw)
+        .wrap_err("failed to deserialize stop reply from daemon")?
+    {
+        DaemonCoordinatorReply::NodeInfoResult { result } => result
+            .map_err(|e| eyre!(e))
+            .wrap_err("failed to stop dataflow"),
+        other => bail!("unexpected reply after sending stop: {other:?}"),
+    }
+}
 
 async fn stop_dataflow(
     dataflow: &RunningDataflow,

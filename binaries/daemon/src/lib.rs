@@ -2,7 +2,7 @@ use aligned_vec::{AVec, ConstAlign};
 use coordinator::CoordinatorEvent;
 use dora_core::config::{Input, OperatorId};
 use dora_core::coordinator_messages::CoordinatorRequest;
-use dora_core::daemon_messages::{DataMessage, InterDaemonEvent, Timestamped};
+use dora_core::daemon_messages::{DataMessage, InterDaemonEvent, NodeConfig, Timestamped};
 use dora_core::message::uhlc::{self, HLC};
 use dora_core::message::{ArrowTypeInfo, Metadata, MetadataParameters};
 use dora_core::{
@@ -447,6 +447,26 @@ impl Daemon {
                 dataflow.stop_all(&self.clock, grace_duration).await;
                 RunStatus::Continue
             }
+            DaemonCoordinatorEvent::NodeConfig {
+                dataflow_id,
+                node_id,
+            } => {
+                let dataflow = self
+                    .running
+                    .get(&dataflow_id)
+                    .wrap_err_with(|| format!("no running dataflow with ID `{dataflow_id}`"))?;
+                let node_config = dataflow
+                    .running_nodes
+                    .get(&node_id)
+                    .map(|node| node.node_config.clone());
+                let reply = DaemonCoordinatorReply::NodeInfoResult {
+                    result: node_config.ok_or_else(|| "no node with ID `{node_id}`".to_string()),
+                };
+                let _ = reply_tx.send(Some(reply)).map_err(|_| {
+                    error!("could not send node info reply from daemon to coordinator")
+                });
+                RunStatus::Continue
+            }
             DaemonCoordinatorEvent::Destroy => {
                 tracing::info!("received destroy command -> exiting");
                 let (notify_tx, notify_rx) = oneshot::channel();
@@ -599,10 +619,8 @@ impl Daemon {
                 .await
                 .wrap_err_with(|| format!("failed to spawn node `{node_id}`"))
                 {
-                    Ok(pid) => {
-                        dataflow
-                            .running_nodes
-                            .insert(node_id.clone(), RunningNode { pid });
+                    Ok(running_node) => {
+                        dataflow.running_nodes.insert(node_id, running_node);
                     }
                     Err(err) => {
                         tracing::error!("{err:?}");
@@ -1241,19 +1259,6 @@ fn runtime_node_inputs(n: &dora_core::descriptor::RuntimeNode) -> BTreeMap<DataI
         .collect()
 }
 
-fn runtime_node_outputs(n: &dora_core::descriptor::RuntimeNode) -> BTreeSet<DataId> {
-    n.operators
-        .iter()
-        .flat_map(|operator| {
-            operator
-                .config
-                .outputs
-                .iter()
-                .map(|output_id| DataId::from(format!("{}/{output_id}", operator.id)))
-        })
-        .collect()
-}
-
 async fn send_input_closed_events<F>(
     dataflow: &mut RunningDataflow,
     inter_daemon_connections: &mut BTreeMap<String, InterDaemonConnection>,
@@ -1331,6 +1336,7 @@ fn close_input(
 #[derive(Debug, Clone)]
 struct RunningNode {
     pid: u32,
+    node_config: NodeConfig,
 }
 
 pub struct RunningDataflow {
