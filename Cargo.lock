@@ -2388,6 +2388,7 @@ dependencies = [
  "aligned-vec",
  "arrow",
  "bincode",
+ "communication-layer-request-reply",
  "dora-arrow-convert",
  "dora-core",
  "dora-tracing",
@@ -2396,6 +2397,7 @@ dependencies = [
  "futures",
  "futures-concurrency",
  "futures-timer",
+ "serde_json",
  "serde_yaml 0.8.26",
  "shared-memory-server",
  "shared_memory_extended",
@@ -2445,6 +2447,7 @@ dependencies = [
  "pyo3",
  "pythonize",
  "serde_yaml 0.8.26",
+ "uuid",
 ]
 
 [[package]]

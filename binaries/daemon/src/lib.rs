@@ -437,7 +437,6 @@ impl Daemon {
                     .running
                     .get_mut(&dataflow_id)
                     .wrap_err_with(|| format!("no running dataflow with ID `{dataflow_id}`"))?;
-                //  .stop_all(&self.clock.clone(), grace_duration);
 
                 let reply = DaemonCoordinatorReply::StopResult(Ok(()));
                 let _ = reply_tx
@@ -938,7 +937,11 @@ impl Daemon {
         .await?;
 
         dataflow.running_nodes.remove(node_id);
-        if dataflow.running_nodes.is_empty() {
+        if dataflow
+            .running_nodes
+            .iter()
+            .all(|(_id, n)| n.node_config.run_config.detached)
+        {
             let result = match self.dataflow_errors.get(&dataflow.id) {
                 None => Ok(()),
                 Some(errors) => {
@@ -1335,7 +1338,7 @@ fn close_input(
 
 #[derive(Debug, Clone)]
 struct RunningNode {
-    pid: u32,
+    pid: Option<u32>,
     node_config: NodeConfig,
 }
 
@@ -1450,12 +1453,14 @@ impl RunningDataflow {
             system.refresh_processes();
 
             for (node, node_details) in running_nodes.iter() {
-                if let Some(process) = system.process(Pid::from(node_details.pid as usize)) {
-                    process.kill();
-                    warn!(
-                        "{node} was killed due to not stopping within the {:#?} grace period",
-                        duration
-                    )
+                if let Some(pid) = node_details.pid {
+                    if let Some(process) = system.process(Pid::from(pid as usize)) {
+                        process.kill();
+                        warn!(
+                            "{node} was killed due to not stopping within the {:#?} grace period",
+                            duration
+                        )
+                    }
                 }
             }
         });

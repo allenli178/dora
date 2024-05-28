@@ -266,6 +266,8 @@ pub struct NodeRunConfig {
     ///  - output_2
     #[serde(default)]
     pub outputs: BTreeSet<DataId>,
+    #[serde(default)]
+    pub detached: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

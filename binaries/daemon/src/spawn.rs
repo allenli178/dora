@@ -71,6 +71,13 @@ pub async fn spawn_node(
         dataflow_descriptor,
     };
 
+    if node_config.run_config.detached {
+        return Ok(RunningNode {
+            pid: None,
+            node_config,
+        });
+    }
+
     let mut child = match node.kind {
         dora_core::descriptor::CoreNodeKind::Custom(n) => {
             let mut command = match n.source.as_str() {
@@ -264,7 +271,10 @@ pub async fn spawn_node(
     let mut child_stdout =
         tokio::io::BufReader::new(child.stdout.take().expect("failed to take stdout"));
     let pid = child.id().unwrap();
-    let running_node = RunningNode { pid, node_config };
+    let running_node = RunningNode {
+        pid: Some(pid),
+        node_config,
+    };
     let stdout_tx = tx.clone();
 
     // Stdout listener stream

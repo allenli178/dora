@@ -333,6 +333,7 @@ impl CoreNodeKind {
                     .iter()
                     .flat_map(|op| op.config.outputs.iter().cloned())
                     .collect(),
+                detached: false,
             },
             CoreNodeKind::Custom(n) => n.run_config.clone(),
         }
