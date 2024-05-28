@@ -2287,6 +2287,7 @@ name = "dora-core"
 version = "0.3.4"
 dependencies = [
  "aligned-vec",
+ "communication-layer-request-reply",
  "dora-message",
  "eyre",
  "once_cell",
