@@ -3,11 +3,12 @@
 use std::time::Duration;
 
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
+use dora_node_api::dora_core::config::NodeId;
 use dora_node_api::merged::{MergeExternalSend, MergedEvent};
 use dora_node_api::{DoraNode, EventStream};
 use dora_operator_api_python::{pydict_to_metadata, PyEvent};
 use dora_ros2_bridge_python::Ros2Subscription;
-use eyre::Context;
+use eyre::{bail, Context};
 use futures::{Stream, StreamExt};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
@@ -32,8 +33,18 @@ pub struct Node {
 #[pymethods]
 impl Node {
     #[new]
-    pub fn new() -> eyre::Result<Self> {
-        let (node, events) = DoraNode::init_from_env()?;
+    pub fn new(
+        node_id: Option<String>,
+        dataflow_id: Option<String>,
+        tracing: Option<bool>,
+    ) -> eyre::Result<Self> {
+        let (node, events) = if let Some(node_id) = node_id {
+            DoraNode::init_from_node_id(dataflow_id, NodeId::from(node_id), tracing)?
+        } else if let Some(_dataflow_id) = dataflow_id {
+            bail!("dataflow_id provided without node_id")
+        } else {
+            DoraNode::init_from_env()?
+        };
 
         Ok(Node {
             events: Events::Dora(events),

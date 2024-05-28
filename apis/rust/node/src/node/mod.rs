@@ -7,12 +7,16 @@ use self::{
 };
 use aligned_vec::{AVec, ConstAlign};
 use arrow::array::Array;
+use communication_layer_request_reply::{RequestReplyLayer, TcpLayer, TcpRequestReplyConnection};
 use dora_core::{
     config::{DataId, NodeId, NodeRunConfig},
+    coordinator_utils::query_running_dataflows,
     daemon_messages::{DataMessage, DataflowId, DropToken, NodeConfig},
     descriptor::Descriptor,
     message::{uhlc, ArrowTypeInfo, Metadata, MetadataParameters},
+    topics::{control_socket_addr, ControlRequest, ControlRequestReply},
 };
+
 use eyre::{bail, WrapErr};
 use shared_memory_extended::{Shmem, ShmemConf};
 use std::{
@@ -43,6 +47,31 @@ pub struct DoraNode {
     cache: VecDeque<ShmemHandle>,
 
     dataflow_descriptor: Descriptor,
+    detached: bool,
+}
+
+fn get_info(
+    session: &mut TcpRequestReplyConnection,
+    dataflow_id: String,
+    node_id: NodeId,
+) -> Result<NodeConfig, eyre::ErrReport> {
+    let reply_raw = session
+        .request(
+            &serde_json::to_vec(&ControlRequest::NodeConfig {
+                dataflow_id,
+                node_id: node_id,
+            })
+            .unwrap(),
+        )
+        .wrap_err("failed to send list message")?;
+    let reply: ControlRequestReply =
+        serde_json::from_slice(&reply_raw).wrap_err("failed to parse reply")?;
+    let node_config = match reply {
+        ControlRequestReply::NodeConfig { node_config } => node_config,
+        ControlRequestReply::Error(err) => bail!("{err}"),
+        other => bail!("unexpected list dataflow reply: {other:?}"),
+    };
+    return Ok(node_config);
 }
 
 impl DoraNode {
@@ -63,6 +92,54 @@ impl DoraNode {
         #[cfg(feature = "tracing")]
         set_up_tracing(&node_config.node_id.to_string())
             .context("failed to set up tracing subscriber")?;
+        Self::init(node_config)
+    }
+
+    /// Initiate a node from a dataflow id and a node id.
+    ///
+    /// ```no_run
+    /// use dora_node_api::DoraNode;
+    ///
+    /// let (mut node, mut events) = DoraNode::init_from_node_id(None, NodeId::from("plot"), None).expect("Could not init node plot");
+    /// ```
+    ///
+    pub fn init_from_node_id(
+        dataflow_uuid: Option<String>,
+        node_id: NodeId,
+        tracing: Option<bool>,
+    ) -> eyre::Result<(Self, EventStream)> {
+        // Make sure that the node is initialized outside of dora start.
+        assert!(std::env::var("DORA_NODE_CONFIG").is_err(), "DORA_NODE_CONFIG should not be set when using node_id configuration within Node initialization.");
+
+        let mut session = TcpLayer::new()
+            .connect(control_socket_addr())
+            .context("could not connect to the coordinator")?;
+
+        let uuid = match dataflow_uuid {
+            Some(uuid) => uuid,
+            None => {
+                let uuids =
+                    query_running_dataflows(&mut *session).wrap_err("Could not find dataflow")?;
+
+                // Return only if there is one uuid.
+                match &uuids[..] {
+                    [id] => id.uuid.to_string(),
+                    [] => bail!("no dataflows running"),
+                    _ => bail!("Multiple dataflows are running and it is ambiguous to launch a node using id only."),
+                }
+            }
+        };
+
+        let node_config =
+            get_info(&mut *session, uuid, node_id).context("Could not get info on dataflow")?;
+
+        // There can only be one global tracer, so this should be optional for user to be able to use their own.
+        if Some(true) == tracing {
+            #[cfg(feature = "tracing")]
+            set_up_tracing(&node_config.node_id.to_string())
+                .context("failed to set up tracing subscriber")?;
+        }
+
         Self::init(node_config)
     }
 
@@ -91,13 +168,13 @@ impl DoraNode {
         let node = Self {
             id: node_id,
             dataflow_id,
-            node_config: run_config,
+            node_config: run_config.clone(),
             control_channel,
             clock,
             sent_out_shared_memory: HashMap::new(),
             drop_stream,
             cache: VecDeque::new(),
-
+            detached: run_config.detached,
             dataflow_descriptor,
         };
         Ok((node, event_stream))
@@ -335,16 +412,18 @@ impl Drop for DoraNode {
     #[tracing::instrument(skip(self), fields(self.id = %self.id), level = "trace")]
     fn drop(&mut self) {
         // close all outputs first to notify subscribers as early as possible
-        if let Err(err) = self
-            .control_channel
-            .report_closed_outputs(
-                std::mem::take(&mut self.node_config.outputs)
-                    .into_iter()
-                    .collect(),
-            )
-            .context("failed to close outputs on drop")
-        {
-            tracing::warn!("{err:?}")
+        if self.detached == false {
+            if let Err(err) = self
+                .control_channel
+                .report_closed_outputs(
+                    std::mem::take(&mut self.node_config.outputs)
+                        .into_iter()
+                        .collect(),
+                )
+                .context("failed to close outputs on drop")
+            {
+                tracing::warn!("{err:?}")
+            }
         }
 
         while !self.sent_out_shared_memory.is_empty() {
