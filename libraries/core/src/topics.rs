@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     config::{NodeId, OperatorId},
+    daemon_messages::NodeConfig,
     descriptor::Descriptor,
 };
 
@@ -40,6 +41,10 @@ pub enum ControlRequest {
     },
     Check {
         dataflow_uuid: Uuid,
+    },
+    NodeConfig {
+        dataflow_id: String,
+        node_id: NodeId,
     },
     Stop {
         dataflow_uuid: Uuid,
@@ -77,6 +82,9 @@ pub enum ControlRequestReply {
 
     DataflowList {
         dataflows: Vec<DataflowId>,
+    },
+    NodeConfig {
+        node_config: NodeConfig,
     },
     DestroyOk,
     DaemonConnected(bool),

@@ -319,6 +319,26 @@ pub enum CoreNodeKind {
     Custom(CustomNode),
 }
 
+impl CoreNodeKind {
+    pub fn run_config(&self) -> NodeRunConfig {
+        match self {
+            CoreNodeKind::Runtime(n) => NodeRunConfig {
+                inputs: n
+                    .operators
+                    .iter()
+                    .flat_map(|op| op.config.inputs.iter().map(|(k, v)| (k.clone(), v.clone())))
+                    .collect(),
+                outputs: n
+                    .operators
+                    .iter()
+                    .flat_map(|op| op.config.outputs.iter().cloned())
+                    .collect(),
+            },
+            CoreNodeKind::Custom(n) => n.run_config.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(transparent)]
 pub struct RuntimeNode {

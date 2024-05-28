@@ -14,7 +14,7 @@ use aligned_vec::{AVec, ConstAlign};
 use dora_message::{uhlc, Metadata};
 use uuid::{NoContext, Timestamp, Uuid};
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct NodeConfig {
     pub dataflow_id: DataflowId,
     pub node_id: NodeId,
@@ -225,6 +225,10 @@ pub enum DaemonCoordinatorEvent {
         dataflow_id: DataflowId,
         node_id: NodeId,
     },
+    NodeConfig {
+        dataflow_id: DataflowId,
+        node_id: NodeId,
+    },
     Destroy,
     Heartbeat,
 }
@@ -253,6 +257,9 @@ pub enum DaemonCoordinatorReply {
         result: Result<(), String>,
         #[serde(skip)]
         notify: Option<tokio::sync::oneshot::Sender<()>>,
+    },
+    NodeInfoResult {
+        result: Result<NodeConfig, String>,
     },
     Logs(Result<Vec<u8>, String>),
 }
