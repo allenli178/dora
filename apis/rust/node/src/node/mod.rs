@@ -109,7 +109,15 @@ impl DoraNode {
         tracing: Option<bool>,
     ) -> eyre::Result<(Self, EventStream)> {
         // Make sure that the node is initialized outside of dora start.
-        assert!(std::env::var("DORA_NODE_CONFIG").is_err(), "DORA_NODE_CONFIG should not be set when using node_id configuration within Node initialization.");
+        if let Ok(node_config_string) = std::env::var("DORA_NODE_CONFIG") {
+            let node_config: NodeConfig = serde_yaml::from_str(&node_config_string)
+                .context("failed to deserialize operator config")?;
+            assert!(
+                node_config.node_id == node_id,
+                "Node id within the yaml description and the node_id does not match. Please either run this node in either detached mode or change or remove `node_id` specification in the code."
+            );
+            return Self::init(node_config);
+        }
 
         let mut session = TcpLayer::new()
             .connect(control_socket_addr())
