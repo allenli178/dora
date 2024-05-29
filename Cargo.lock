@@ -8043,6 +8043,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-dataflow-example-sink-detached"
+version = "0.3.4"
+dependencies = [
+ "dora-node-api",
+ "eyre",
+]
+
+[[package]]
 name = "rust-dataflow-example-status-node"
 version = "0.3.4"
 dependencies = [
