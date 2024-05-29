@@ -99,8 +99,9 @@ impl DoraNode {
     ///
     /// ```no_run
     /// use dora_node_api::DoraNode;
+    /// use dora_node_api::dora_core::config::NodeId;
     ///
-    /// let (mut node, mut events) = DoraNode::init_from_node_id(None, NodeId::from("plot"), None).expect("Could not init node plot");
+    /// let (mut node, mut events) = DoraNode::init_from_node_id(None, NodeId::from("plot".to_string()), None).expect("Could not init node plot");
     /// ```
     ///
     pub fn init_from_node_id(
