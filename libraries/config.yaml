@@ -1,0 +1,4 @@
+template_name: "md"
+description_is_markdown: true
+show_toc: false
+collapse_long_descriptions: true
