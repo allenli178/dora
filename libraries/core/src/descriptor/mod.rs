@@ -83,6 +83,7 @@ impl Descriptor {
                     run_config: NodeRunConfig {
                         inputs: node.inputs,
                         outputs: node.outputs,
+                        detached: false,
                     },
                     envs: None,
                 }),
