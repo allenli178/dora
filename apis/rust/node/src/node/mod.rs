@@ -59,7 +59,7 @@ fn get_info(
         .request(
             &serde_json::to_vec(&ControlRequest::NodeConfig {
                 dataflow_id,
-                node_id: node_id,
+                node_id,
             })
             .unwrap(),
         )
@@ -71,7 +71,7 @@ fn get_info(
         ControlRequestReply::Error(err) => bail!("{err}"),
         other => bail!("unexpected list dataflow reply: {other:?}"),
     };
-    return Ok(node_config);
+    Ok(node_config)
 }
 
 impl DoraNode {
@@ -421,7 +421,7 @@ impl Drop for DoraNode {
     #[tracing::instrument(skip(self), fields(self.id = %self.id), level = "trace")]
     fn drop(&mut self) {
         // close all outputs first to notify subscribers as early as possible
-        if self.detached == false {
+        if !self.detached {
             if let Err(err) = self
                 .control_channel
                 .report_closed_outputs(

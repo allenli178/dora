@@ -3,6 +3,7 @@ use coordinator::CoordinatorEvent;
 use dora_core::config::{Input, OperatorId};
 use dora_core::coordinator_messages::CoordinatorRequest;
 use dora_core::daemon_messages::{DataMessage, InterDaemonEvent, NodeConfig, Timestamped};
+use dora_core::descriptor::runtime_node_inputs;
 use dora_core::message::uhlc::{self, HLC};
 use dora_core::message::{ArrowTypeInfo, Metadata, MetadataParameters};
 use dora_core::{
@@ -1246,20 +1247,6 @@ fn node_inputs(node: &ResolvedNode) -> BTreeMap<DataId, Input> {
         CoreNodeKind::Custom(n) => n.run_config.inputs.clone(),
         CoreNodeKind::Runtime(n) => runtime_node_inputs(n),
     }
-}
-
-fn runtime_node_inputs(n: &dora_core::descriptor::RuntimeNode) -> BTreeMap<DataId, Input> {
-    n.operators
-        .iter()
-        .flat_map(|operator| {
-            operator.config.inputs.iter().map(|(input_id, mapping)| {
-                (
-                    DataId::from(format!("{}/{input_id}", operator.id)),
-                    mapping.clone(),
-                )
-            })
-        })
-        .collect()
 }
 
 async fn send_input_closed_events<F>(

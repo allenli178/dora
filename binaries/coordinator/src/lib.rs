@@ -499,10 +499,7 @@ async fn start_inner(
                                     clock.new_timestamp(),
                                 )
                                 .await
-                                .map(|node_config| {
-                                    let message = ControlRequestReply::NodeConfig { node_config };
-                                    message
-                                })
+                                .map(|node_config| ControlRequestReply::NodeConfig { node_config })
                             } else {
                                 Err(eyre::eyre!("could not parse dataflow id. Name parsing is not implemented name parsing yet!"))
                             };
