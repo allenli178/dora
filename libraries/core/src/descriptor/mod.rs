@@ -320,20 +320,39 @@ pub enum CoreNodeKind {
     Custom(CustomNode),
 }
 
+pub fn runtime_node_inputs(n: &RuntimeNode) -> BTreeMap<DataId, Input> {
+    n.operators
+        .iter()
+        .flat_map(|operator| {
+            operator.config.inputs.iter().map(|(input_id, mapping)| {
+                (
+                    DataId::from(format!("{}/{input_id}", operator.id)),
+                    mapping.clone(),
+                )
+            })
+        })
+        .collect()
+}
+
+fn runtime_node_outputs(n: &RuntimeNode) -> BTreeSet<DataId> {
+    n.operators
+        .iter()
+        .flat_map(|operator| {
+            operator
+                .config
+                .outputs
+                .iter()
+                .map(|output_id| DataId::from(format!("{}/{output_id}", operator.id)))
+        })
+        .collect()
+}
+
 impl CoreNodeKind {
     pub fn run_config(&self) -> NodeRunConfig {
         match self {
             CoreNodeKind::Runtime(n) => NodeRunConfig {
-                inputs: n
-                    .operators
-                    .iter()
-                    .flat_map(|op| op.config.inputs.iter().map(|(k, v)| (k.clone(), v.clone())))
-                    .collect(),
-                outputs: n
-                    .operators
-                    .iter()
-                    .flat_map(|op| op.config.outputs.iter().cloned())
-                    .collect(),
+                inputs: runtime_node_inputs(n),
+                outputs: runtime_node_outputs(n),
                 detached: false,
             },
             CoreNodeKind::Custom(n) => n.run_config.clone(),
