@@ -289,12 +289,13 @@ jobs:
           dora start dataflow.yml --name ci-rust-test
           sleep 10
           dora stop --name ci-rust-test  --grace-duration 5s
-          dora start examples/rust-dataflow/dataflow_detached.yml --name ci-rust-detached
+          dora build ../examples/rust-dataflow/dataflow_detached.yml
+          dora start ../examples/rust-dataflow/dataflow_detached.yml --name ci-rust-detached
           cargo run -p rust-dataflow-example-sink-detached
           sleep 5
           dora stop --name ci-rust-detached  --grace-duration 5s
           dora destroy
-          
+
       - name: "Test CLI (Python)"
         timeout-minutes: 30
         # fail-fast by using bash shell explictly
@@ -316,8 +317,8 @@ jobs:
           dora start dataflow.yml --name ci-python-test
           sleep 10
           dora stop --name ci-python-test  --grace-duration 5s
-          dora start examples/python-dataflow/dataflow_detached.yml --name ci-python-detached
-          python examples/python-dataflow/plot_detached.py
+          dora start ../examples/python-dataflow/dataflow_detached.yml --name ci-python-detached
+          python ../examples/python-dataflow/plot_detached.py
           sleep 5
           dora stop --name ci-python-test  --grace-duration 5s
           dora destroy
